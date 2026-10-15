@@ -1,0 +1,24 @@
+{
+	"schemaVersion": 1,
+	"id": "overtake",
+	"version": "${version}",
+	"name": "OverTake",
+	"description": "Client-side combat readiness, weapon switching, and diagnostics.",
+	"authors": [
+		"OverTake contributors"
+	],
+	"license": "CC0-1.0",
+	"icon": "assets/template-mod/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"name.modid.client.OvertakeClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": ">=0.141.6"
+	}
+}
