@@ -2,17 +2,18 @@
 	"schemaVersion": 1,
 	"id": "overtake",
 	"version": "${version}",
-	"name": "OverTake",
-	"description": "Client-side combat readiness, weapon switching, and diagnostics.",
+	"name": "Clumps",
+	"description": "Clumps exp orbs together.",
 	"authors": [
 		"OverTake contributors"
 	],
 	"license": "CC0-1.0",
-	"icon": "assets/template-mod/icon.png",
+	"icon": "assets/overtake/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"name.modid.client.OvertakeClient"
+			"name.modid.client.OvertakeClient",
+			"name.modid.client.module.StunSlamClient"
 		]
 	},
 	"depends": {

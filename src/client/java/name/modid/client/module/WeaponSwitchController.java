@@ -82,7 +82,6 @@ public final class WeaponSwitchController {
         if (isSpear(player.getInventory().getItem(selectedSlot))) return selectedSlot;
         for (String kind : priority) {
             if ("sword".equals(kind) && swordSlot >= 0) return swordSlot;
-            if ("axe".equals(kind) && axeSlot >= 0) return axeSlot;
         }
         return -1;
     }
@@ -199,7 +198,7 @@ public final class WeaponSwitchController {
                 return;
             }
             if (selected != requestedSlot) {
-                player.getInventory().setSelectedSlot(requestedSlot);
+                selectSlot(client, requestedSlot);
                 observedSlot = requestedSlot;
                 switchedByController = true;
                 verifyNextTick = true;
@@ -234,10 +233,14 @@ public final class WeaponSwitchController {
         if (restoreSlot && switchedByController && !manualChanged && client.player != null
                 && client.player.getInventory().getSelectedSlot() == requestedSlot && previousSlot >= 0) {
             state = State.RESTORE_PENDING;
-            client.player.getInventory().setSelectedSlot(previousSlot);
+            selectSlot(client, previousSlot);
             observedSlot = previousSlot;
         }
         clear();
+    }
+
+    private static void selectSlot(Minecraft client, int slot) {
+        client.player.getInventory().setSelectedSlot(slot);
     }
 
     public boolean isSwitching() {

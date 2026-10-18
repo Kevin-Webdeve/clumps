@@ -31,9 +31,6 @@ public final class OvertakeRuntime {
                 && OvertakeClient.SWITCHER.findMaceSlot(client.player) >= 0) {
             maximumRange = Math.max(maximumRange, Math.min(settings.maceRange, 4.5));
         }
-        if (settings.stunEnabled) {
-            maximumRange = Math.max(maximumRange, targetRange(client, settings.stunRange));
-        }
         return distance <= maximumRange ? target : null;
     }
 
@@ -64,8 +61,7 @@ public final class OvertakeRuntime {
         OvertakeConfig.Settings settings = config.settings();
         List<String> lines = new ArrayList<>(8);
         lines.add("OverTake: " + (config.masterEnabled ? "ON" : "OFF") + " [" + config.profile + "]");
-        lines.add("Switch " + onOff(settings.switchEnabled) + " | Mace " + onOff(settings.maceEnabled)
-                + " | Stun " + onOff(settings.stunEnabled));
+        lines.add("Switch " + onOff(settings.switchEnabled) + " | Mace " + onOff(settings.maceEnabled));
         var player = Minecraft.getInstance().player;
         lines.add("Selected: " + (player == null ? "unavailable" : player.getMainHandItem().getHoverName().getString()));
         int preferredSlot = player == null ? -1 : maceReady

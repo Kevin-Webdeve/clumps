@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.network.chat.Component;
 import name.modid.client.OvertakeClient;
 import name.modid.client.config.OvertakeConfig;
+import name.modid.client.config.StunKeybind;
 
 import java.util.List;
 import java.util.Locale;
@@ -48,7 +49,7 @@ public final class OvertakeCommands {
                 }))
                 .then(literal("status").executes(context -> feedback(context.getSource(), status())))
                 .then(literal("help").executes(context -> feedback(context.getSource(),
-                        "Commands: /ot on|off|toggle|status|help|config|reload|debug <on|off>|profile <default|pvp|practice>; /ot switch, mace (auto/triggerbot), stun, hud")))
+                        "Commands: /ot on|off|toggle|status|help|config|reload|debug <on|off>|profile <default|pvp|practice>; /ot switch, mace, stun, hud")))
                 .then(literal("config").executes(context -> feedback(context.getSource(), configSummary())))
                 .then(literal("reload").executes(context -> {
                     OvertakeClient.SWITCHER.cancel(context.getSource().getClient(), false);
@@ -136,8 +137,8 @@ public final class OvertakeCommands {
                         "Mace assistance", value -> value.maceEnabled = false, "Mace assistance disabled.")))
                 .then(maceTriggerbotCommand("auto"))
                 .then(maceTriggerbotCommand("triggerbot"))
-                .then(literal("mode").then(literal("manual").executes(context -> setMode(context.getSource(), true, "manual")))
-                        .then(literal("assist").executes(context -> setMode(context.getSource(), true, "assist"))))
+                .then(literal("mode").then(literal("manual").executes(context -> setMode(context.getSource(), "manual")))
+                        .then(literal("assist").executes(context -> setMode(context.getSource(), "assist"))))
                 .then(literal("threshold").then(argument("blocks", DoubleArgumentType.doubleArg(2.0, 20.0))
                         .executes(context -> {
                             double blocks = DoubleArgumentType.getDouble(context, "blocks");
@@ -170,34 +171,10 @@ public final class OvertakeCommands {
         return literal(command)
                 .then(literal("on").executes(context -> setBoolean(context.getSource(),
                         "Mace triggerbot", value -> value.maceAutoAttack = true,
-                        "Mace triggerbot enabled; it attacks a valid crosshair target when the normal attack cooldown is ready during a fall window.")))
+                        "Mace triggerbot enabled; it attacks a valid crosshair target during a fall window without waiting for full weapon cooldown.")))
                 .then(literal("off").executes(context -> setBoolean(context.getSource(),
                         "Mace triggerbot", value -> value.maceAutoAttack = false,
                         "Mace triggerbot disabled.")));
-    }
-
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> stunCommands() {
-        return literal("stun")
-                .then(literal("on").executes(context -> setBoolean(context.getSource(), "Stun slam",
-                        value -> value.stunEnabled = true, "Stun slam enabled; use assist mode to run the axe-to-mace combo.")))
-                .then(literal("off").executes(context -> setBoolean(context.getSource(),
-                        "Stun assistance", value -> value.stunEnabled = false, "Stun assistance disabled.")))
-                .then(literal("mode").then(literal("manual").executes(context -> setMode(context.getSource(), false, "manual")))
-                        .then(literal("assist").executes(context -> setMode(context.getSource(), false, "assist"))))
-                .then(literal("range").then(argument("blocks", DoubleArgumentType.doubleArg(1.0, 16.0))
-                        .executes(context -> setRange(context.getSource(), "Stun range",
-                                DoubleArgumentType.getDouble(context, "blocks"),
-                                settings -> settings.stunRange = DoubleArgumentType.getDouble(context, "blocks")))))
-                .then(literal("cooldown").then(argument("ticks", IntegerArgumentType.integer(0, 12000))
-                        .executes(context -> {
-                            OvertakeClient.CONFIG.settings().stunCooldown = IntegerArgumentType.getInteger(context, "ticks");
-                            save(context.getSource(), "Stun cooldown: " + OvertakeClient.CONFIG.settings().stunCooldown + " ticks.");
-                            return 1;
-                        })))
-                .then(literal("status").executes(context -> feedback(context.getSource(), "Stun "
-                        + onOff(OvertakeClient.CONFIG.settings().stunEnabled) + ", mode "
-                        + OvertakeClient.CONFIG.settings().stunMode
-                        + "; requires a blocking target, axe, mace, and a 2-block fall.")));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> hudCommands() {
@@ -226,6 +203,75 @@ public final class OvertakeCommands {
                         })));
     }
 
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> stunCommands() {
+        return literal("stun")
+                .then(literal("keybind").then(argument("key", StringArgumentType.string()).executes(context -> {
+                    String key = StringArgumentType.getString(context, "key");
+                    if (!StunKeybind.isValid(key)) {
+                        return error(context.getSource(),
+                                "Invalid key. Use a letter (R), digit (1), function key (F1-F12), or mouse button (mouse2-mouse5).");
+                    }
+                    OvertakeClient.CONFIG.stunKeybind = StunKeybind.normalize(key);
+                    return save(context.getSource(), "Stun slam keybind set to " + OvertakeClient.CONFIG.stunKeybind + ".");
+                })))
+                .then(literal("target")
+                        .then(literal("crosshair").executes(context ->
+                                setStunTarget(context.getSource(), "CROSSHAIR_ONLY", "crosshair")))
+                        .then(literal("nearest").executes(context ->
+                                setStunTarget(context.getSource(), "NEAREST_ONLY", "nearest")))
+                        .then(literal("both").executes(context ->
+                                setStunTarget(context.getSource(), "CROSSHAIR_OR_NEAREST", "both"))))
+                .then(literal("mode")
+                        .then(literal("auto").executes(context ->
+                                setStunMode(context.getSource(), "AUTO", "auto")))
+                        .then(literal("mace").executes(context ->
+                                setStunMode(context.getSource(), "MACE_ONLY", "mace")))
+                        .then(literal("sword").executes(context ->
+                                setStunMode(context.getSource(), "SWORD_ONLY", "sword"))))
+                .then(literal("reach").then(argument("blocks", DoubleArgumentType.doubleArg(1.0, 6.0))
+                        .executes(context -> {
+                            double reach = DoubleArgumentType.getDouble(context, "blocks");
+                            OvertakeClient.CONFIG.settings().stunReach = reach;
+                            return save(context.getSource(), "Stun target reach set to " + reach + " blocks.");
+                        })))
+                .then(literal("cone").then(argument("degrees", DoubleArgumentType.doubleArg(1.0, 180.0))
+                        .executes(context -> {
+                            double cone = DoubleArgumentType.getDouble(context, "degrees");
+                            OvertakeClient.CONFIG.settings().stunAimCone = cone;
+                            return save(context.getSource(), "Stun aim cone set to " + cone + " degrees.");
+                        })))
+                .then(literal("degree").then(argument("degrees", DoubleArgumentType.doubleArg(1.0, 360.0))
+                        .executes(context -> {
+                            double degrees = DoubleArgumentType.getDouble(context, "degrees");
+                            OvertakeClient.CONFIG.settings().stunAimCone = degrees;
+                            return save(context.getSource(),
+                                    "Stun nearest-target angle set to " + degrees + " degrees.");
+                        })))
+                .then(literal("fall_check").then(literal("on").executes(context -> setBoolean(context.getSource(),
+                                "Mace fall check", settings -> settings.stunMaceFallCheck = true,
+                                "Mace fall check enabled."))
+                        .then(literal("off").executes(context -> setBoolean(context.getSource(),
+                                "Mace fall check", settings -> settings.stunMaceFallCheck = false,
+                                "Mace fall check disabled.")))))
+                .then(literal("status").executes(context -> {
+                    var settings = OvertakeClient.CONFIG.settings();
+                    return feedback(context.getSource(), "Stun key " + OvertakeClient.CONFIG.stunKeybind
+                            + ", target " + settings.targetMode + ", follow-up " + settings.followUpMode
+                            + ", reach " + settings.stunReach + ", aim cone " + settings.stunAimCone
+                            + " degrees, mace fall check " + onOff(settings.stunMaceFallCheck) + ".");
+                }));
+    }
+
+    private static int setStunTarget(FabricClientCommandSource source, String mode, String label) {
+        OvertakeClient.CONFIG.settings().targetMode = mode;
+        return save(source, "Stun target mode: " + label + ".");
+    }
+
+    private static int setStunMode(FabricClientCommandSource source, String mode, String label) {
+        OvertakeClient.CONFIG.settings().followUpMode = mode;
+        return save(source, "Stun follow-up mode: " + label + ".");
+    }
+
     private static int setSwitching(FabricClientCommandSource source, boolean enabled) {
         var settings = OvertakeClient.CONFIG.settings();
         settings.switchEnabled = enabled;
@@ -233,10 +279,9 @@ public final class OvertakeCommands {
         return save(source, "Weapon switching " + onOff(enabled) + ".");
     }
 
-    private static int setMode(FabricClientCommandSource source, boolean mace, String mode) {
-        if (mace) OvertakeClient.CONFIG.settings().maceMode = mode;
-        else OvertakeClient.CONFIG.settings().stunMode = mode;
-        return save(source, (mace ? "Mace" : "Stun") + " mode: " + mode + ".");
+    private static int setMode(FabricClientCommandSource source, String mode) {
+        OvertakeClient.CONFIG.settings().maceMode = mode;
+        return save(source, "Mace mode: " + mode + ".");
     }
 
     private static int setRange(FabricClientCommandSource source, String name, double number,
@@ -279,8 +324,8 @@ public final class OvertakeCommands {
         return "Master " + onOff(OvertakeClient.CONFIG.masterEnabled) + " | profile "
                 + OvertakeClient.CONFIG.profile + " | switch " + onOff(settings.switchEnabled)
                 + " | mace " + onOff(settings.maceEnabled) + " (" + settings.maceMode
-                + ", triggerbot " + onOff(settings.maceAutoAttack) + ") | stun "
-                + onOff(settings.stunEnabled) + " | HUD " + onOff(settings.hudEnabled) + ".";
+                + ", triggerbot " + onOff(settings.maceAutoAttack) + ") | HUD "
+                + onOff(settings.hudEnabled) + ".";
     }
 
     private static String configSummary() {
@@ -291,8 +336,11 @@ public final class OvertakeCommands {
                 + slotSetting(settings.axeSlot)
                 + "; priority " + String.join(" > ", settings.weaponPriority) + "; mace threshold "
                 + settings.maceThreshold + " blocks; mace triggerbot " + onOff(settings.maceAutoAttack)
-                + "; ranges melee/mace/stun " + settings.meleeRange + "/"
-                + settings.maceRange + "/" + settings.stunRange + "; restore " + onOff(settings.restoreSlot)
+                + "; stun key " + OvertakeClient.CONFIG.stunKeybind + " target/mode "
+                + settings.targetMode + "/" + settings.followUpMode
+                + " reach/cone " + settings.stunReach + "/" + settings.stunAimCone
+                + "; ranges melee/mace " + settings.meleeRange + "/"
+                + settings.maceRange + "; restore " + onOff(settings.restoreSlot)
                 + "; manual override " + onOff(settings.manualOverride) + "; HUD "
                 + (settings.hudEnabled ? settings.hudX + "," + settings.hudY + " scale " + settings.hudScale : "off")
                 + "; sound alerts " + onOff(settings.soundAlerts) + "; debug "

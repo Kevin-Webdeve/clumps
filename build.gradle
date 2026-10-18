@@ -64,6 +64,10 @@ jar {
 	}
 }
 
+tasks.named("remapJar") {
+	archiveFileName = "Clumps-fabric-1.21.11-29.0.0.jar"
+}
+
 // configure the maven publication
 publishing {
 	publications {

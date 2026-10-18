@@ -10,7 +10,7 @@ The project is configured for Minecraft **1.21.11**, Fabric Loader **0.19.5**, F
 .\gradlew.bat build
 ```
 
-Copy `build\libs\overtake-1.0.0.jar` to the Minecraft `mods` folder along with Fabric Loader and Fabric API.
+Copy `build\libs\Clumps-fabric-1.21.11-29.0.0.jar` to the Minecraft `mods` folder along with Fabric Loader and Fabric API.
 
 ## Commands
 
@@ -32,10 +32,13 @@ Use client command `/ot`:
 /ot mace threshold <2-20>
 /ot mace range <1-16>
 /ot mace delay <0-100>
-/ot stun on|off|status
-/ot stun mode manual|assist
-/ot stun range <1-16>
-/ot stun cooldown <0-12000>
+/ot stun keybind "key" (for example "R", "mouse4", or "F1")
+/ot stun target crosshair|nearest|both
+/ot stun mode auto|mace|sword
+/ot stun reach <1-6>
+/ot stun cone <1-180>
+/ot stun fall_check on|off
+/ot stun message on|off
 /ot hud on|off
 /ot hud sound on|off
 /ot hud position <x> <y>
@@ -48,11 +51,10 @@ The active profile's `targetType` accepts `living` (default) or `players`. `mace
 
 ## Behavior and limitations
 
-- Weapon switching is the centralized one-action scheduler: each request has a mace/melee identifier and priority, is revalidated every client tick, expires if it cannot complete within its delay window, and verifies the selected slot after switching. Switching runs before the tick's attack input so the selected weapon is used for that tick's attack; failed selection is throttled before retry. Manual input can cancel or defer a transaction, and normal melee switching requires attack input and a valid crosshair target. Mace assistance selects a mace only inside the configured falling window.
+- Weapon switching is the centralized one-action scheduler: each request has a mace/melee identifier and priority, is revalidated every client tick, expires if it cannot complete within its delay window, and verifies the selected slot after switching. Switching runs before the tick's attack input so the selected weapon is used for that tick's attack; vanilla's interaction manager synchronizes the selected slot before the attack packet. Manual input can cancel or defer a transaction, and normal melee switching requires attack input and a valid crosshair target. Normal melee switching follows the configured sword priority and does not automatically switch to an axe, including against blocking targets. Mace assistance selects a mace only inside the configured falling window.
 - Target and weapon-switch checks, including mace assistance, are capped at 4.5 blocks with a spear and 3 blocks with other items; configured ranges can lower these limits. Auto mace switches to a mace from any currently selected item when a hotbar mace is available and the other readiness conditions are met. This does not extend Minecraft's actual attack reach.
-- With an axe in the hotbar, an attack click while descending after a 2-block fall on a target within 3 blocks is queued, switches to the axe, and attacks once after the axe is selected. While grounded, rising, or before the fall threshold, the click is left to normal game handling. A queued attack is discarded if the fall ends or the target leaves range before the switch completes.
-- The mace triggerbot is off by default. Enable it with `/ot mace triggerbot on` (or `/ot mace auto on`); with switching and mace assistance enabled, it selects a mace for a living crosshair target while descending after the configured fall-distance threshold (default 2 blocks), then attacks once the normal attack cooldown is ready. It does not target entities outside the crosshair or repeat attacks during the same fall. Server latency, server tick rate, and game mechanics affect the actual result.
-- Stun slam assist is enabled with `/ot stun on` and `/ot stun mode assist`. Click a target that is actively blocking with a shield while descending after the configured 2-block mace threshold; with an axe and mace in the hotbar and the target within 3 blocks, the mod attacks once with the axe, switches to the mace, then attacks once more. Both attacks use normal client/server combat logic; timing and shield-disable behavior depend on game cooldowns and server rules.
+- The mace triggerbot is off by default. Enable it with `/ot mace triggerbot on` (or `/ot mace auto on`); with switching and mace assistance enabled, it selects a mace for a living crosshair target while descending after the configured fall-distance threshold (default 2 blocks), then attacks as soon as the mace is selected without waiting for full weapon cooldown. It does not target entities outside the crosshair or repeat attacks during the same fall. Early attacks may deal reduced damage under Minecraft's combat mechanics; server latency and server tick rate also affect the result.
+- Press the configurable stun key (default G; mouse buttons 2-5 are supported, but left click is not) to perform the client-side axe/follow-up sequence. It selects and attacks with the axe first, then switches to the follow-up weapon on the next client tick, so both selected slots are synchronized through vanilla gameplay. It targets the crosshair or a nearby target in a 60-degree aim cone and defaults to mace follow-up when available. `/ot stun target`, `/ot stun mode`, `/ot stun reach`, `/ot stun cone`, and `/ot stun fall_check` configure its behavior.
 - Shield, pearl, and totem availability are read-only reminders; OverTake does not automatically use these items.
 - The HUD shows master/module state, selected and preferred weapons, target distance, readiness, transaction state, utility-item availability, and optional tick-processing cost. Position and scale are configurable; the sound-alert setting cues the rising edge of mace readiness.
 
@@ -63,10 +65,9 @@ The active profile's `targetType` accepts `living` (default) or `players`. `mace
 3. Change slots manually during a pending switch with manual override on and off; verify selection state before and after.
 4. Move the target out of range, stop attacking, die, disconnect, and change worlds during a pending switch. Verify cancellation and optional restoration.
 5. Disable the master system during a pending switch; verify that no further switch occurs.
-6. Check airborne mace feedback with and without a hotbar mace, at range boundaries, and with different threshold/delay values. Verify the triggerbot stays off by default, then enable it and confirm it attacks only a living crosshair target once per fall after the threshold and when the normal attack cooldown is ready; do not interpret readiness as a guaranteed hit.
-7. With a shield-blocking target, test stun assist while grounded, rising, below the fall threshold, outside range, and with axe/mace missing; verify no combo occurs. Then test the axe hit and mace follow-up with both items available.
-8. Change profile and HUD settings, restart the client, and verify persistence. Test malformed JSON recovery by backing up then editing `config\overtake.json`.
-9. Enable debug logging and compare HUD tick cost at normal and reduced frame rates. Client processing time does not include server or network latency.
+6. Check airborne mace feedback with and without a hotbar mace, at range boundaries, and with different threshold/delay values. Verify the triggerbot stays off by default, then enable it and confirm it attacks only a living crosshair target once per fall after the threshold as soon as the mace is selected; do not interpret an attack attempt as a guaranteed full-damage hit.
+7. Change profile and HUD settings, restart the client, and verify persistence. Test malformed JSON recovery by backing up then editing `config\overtake.json`.
+8. Enable debug logging and compare HUD tick cost at normal and reduced frame rates. Client processing time does not include server or network latency.
 
 ## Development
 
