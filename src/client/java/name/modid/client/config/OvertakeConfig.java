@@ -92,7 +92,7 @@ public final class OvertakeConfig {
         public int activationTimeoutTicks = 5;
         public int inputBufferTicks = 1;
         public int dashCooldownTicks = 2;
-        public int spearLungeSwitchDelayMs = 50;
+        public int spearLungeSwitchDelayMs = 30;
         public boolean requireLungeEnchantment = true;
         public boolean allowVerticalDash;
         public boolean allowAirDash = true;
