@@ -1,0 +1,32 @@
+name: release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'microsoft'
+      - name: Build and test
+        run: ./gradlew build
+      - name: Upload versioned mod JAR to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          jars=(build/libs/Clumps-fabric-*.jar)
+          test "${#jars[@]}" -eq 1
+          gh release upload "$GITHUB_REF_NAME" "${jars[0]}" --clobber
