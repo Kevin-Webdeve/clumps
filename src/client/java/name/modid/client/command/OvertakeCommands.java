@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import name.modid.client.OvertakeClient;
 import name.modid.client.config.OvertakeConfig;
 import name.modid.client.config.StunKeybind;
+import name.modid.client.module.SpearLungeFeature;
 
 import java.util.List;
 import java.util.Locale;
@@ -47,9 +48,9 @@ public final class OvertakeCommands {
                     save(context.getSource(), "OverTake " + (enabling ? "enabled." : "disabled; pending actions cancelled."));
                     return 1;
                 }))
-                .then(literal("status").executes(context -> feedback(context.getSource(), status())))
+                .then(literal("status").executes(context -> status(context.getSource())))
                 .then(literal("help").executes(context -> feedback(context.getSource(),
-                        "Commands: /ot on|off|toggle|status|help|config|reload|debug <on|off>|profile <default|pvp|practice>; /ot switch, mace, stun, hud")))
+                        "Commands: /ot on|off|toggle|status|help|config|reload|debug <on|off>|profile <default|pvp|practice|sword|axe|smp|crystal|pot|uhc|cart|mace|spear|vanilla|tnt>; /ot sword, crystal, cart, pot, sp, pearl, switch, mace, stun, hud. Status aliases show the full /ot status.")))
                 .then(literal("config").executes(context -> feedback(context.getSource(), configSummary())))
                 .then(literal("reload").executes(context -> {
                     OvertakeClient.SWITCHER.cancel(context.getSource().getClient(), false);
@@ -62,22 +63,140 @@ public final class OvertakeCommands {
                         .then(literal("off").executes(context -> setDebug(context.getSource(), false))))
                 .then(literal("profile").then(argument("name", StringArgumentType.word())
                         .suggests((context, builder) -> {
-                            builder.suggest("default").suggest("pvp").suggest("practice");
+                            builder.suggest("default").suggest("pvp").suggest("practice")
+                                    .suggest("sword").suggest("axe").suggest("smp")
+                                    .suggest("crystal").suggest("pot").suggest("uhc")
+                                    .suggest("cart").suggest("mace").suggest("spear")
+                                    .suggest("vanilla").suggest("tnt");
                             return builder.buildFuture();
                         }).executes(context -> {
-                            String profile = StringArgumentType.getString(context, "name").toLowerCase(Locale.ROOT);
-                            if (!List.of("default", "pvp", "practice").contains(profile)) {
-                                return error(context.getSource(), "Profile must be default, pvp, or practice.");
+                            String requestedProfile = StringArgumentType.getString(context, "name");
+                            String profile = OvertakeConfig.normalizeProfile(requestedProfile);
+                            if (profile == null) {
+                                return error(context.getSource(),
+                                        "Unknown profile. Choose default, pvp, practice, sword, axe, smp, crystal, pot, uhc, cart, mace, spear, vanilla, or tnt.");
                             }
+                            OvertakeClient.SWITCHER.cancel(context.getSource().getClient(), false);
                             OvertakeClient.CONFIG.profile = profile;
                             OvertakeClient.CONFIG.settings().validate();
-                            save(context.getSource(), "Active profile: " + profile + ".");
-                            return 1;
+                            return save(context.getSource(), "Active profile: " + profile
+                                    + " (saved settings are kept separately for each profile).");
                         })))
                 .then(switchCommands())
                 .then(maceCommands())
+                .then(swordCommands())
+                .then(crystalCommands())
+                .then(cartCommands())
+                .then(healingPotionCommands())
                 .then(stunCommands())
+                .then(spearLungeCommands())
+                .then(pearlCommands())
                 .then(hudCommands()));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    swordCommands() {
+        return literal("sword")
+                .then(literal("triggerbot")
+                        .then(literal("on").executes(context -> setProfileBoolean(context.getSource(), "sword",
+                                settings -> settings.swordTriggerbot = true,
+                                "Sword triggerbot enabled.")))
+                        .then(literal("off").executes(context -> setProfileBoolean(context.getSource(), "sword",
+                                settings -> settings.swordTriggerbot = false,
+                                "Sword triggerbot disabled."))))
+                .then(literal("sprint_reset")
+                        .then(literal("on").executes(context -> setProfileBoolean(context.getSource(), "sword",
+                                settings -> settings.swordSprintReset = true,
+                                "Sword S/W sprint reset enabled.")))
+                        .then(literal("off").executes(context -> setProfileBoolean(context.getSource(), "sword",
+                                settings -> settings.swordSprintReset = false,
+                                "Sword S/W sprint reset disabled."))));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    crystalCommands() {
+        return keybindCommands("crystal", "Crystal action", config -> config.crystalKeybind,
+                (config, key) -> config.crystalKeybind = key);
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    cartCommands() {
+        return keybindCommands("cart", "TNT minecart action", config -> config.cartKeybind,
+                (config, key) -> config.cartKeybind = key);
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    healingPotionCommands() {
+        return keybindCommands("pot", "Healing potion action", config -> config.healingPotionKeybind,
+                (config, key) -> config.healingPotionKeybind = key);
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    keybindCommands(String command, String label,
+                    java.util.function.Function<OvertakeConfig, String> getter,
+                    java.util.function.BiConsumer<OvertakeConfig, String> setter) {
+        return literal(command)
+                .then(literal("status").executes(context -> feedback(context.getSource(),
+                        label + " keybind: " + getter.apply(OvertakeClient.CONFIG) + ".")))
+                .then(literal("keybind").then(argument("key", StringArgumentType.string()).executes(context -> {
+                    String key = StringArgumentType.getString(context, "key");
+                    if (!StunKeybind.isValid(key)) {
+                        return error(context.getSource(),
+                                "Invalid key. Use a letter, digit, F1-F12, or mouse button (mouse2-mouse5).");
+                    }
+                    key = StunKeybind.normalize(key);
+                    setter.accept(OvertakeClient.CONFIG, key);
+                    return save(context.getSource(), label + " keybind set to " + key + ".");
+                })));
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
+    spearLungeCommands() {
+        return literal("sp")
+                .executes(context -> {
+                    boolean enabled = !OvertakeClient.CONFIG.dashEnabled;
+                    return setSpearLungeEnabled(context.getSource(), enabled);
+                })
+                .then(literal("on").executes(context -> setSpearLungeEnabled(context.getSource(), true)))
+                .then(literal("off").executes(context -> setSpearLungeEnabled(context.getSource(), false)))
+                .then(literal("status").executes(context -> status(context.getSource())))
+                .then(literal("delay").then(argument("milliseconds", IntegerArgumentType.integer(0, 5000))
+                        .executes(context -> {
+                            int delay = IntegerArgumentType.getInteger(context, "milliseconds");
+                            OvertakeClient.CONFIG.settings().spearLungeSwitchDelayMs = delay;
+                            return save(context.getSource(), "Spear Lunge switch delay: " + delay + " ms.");
+                        })));
+    }
+
+    private static int setSpearLungeEnabled(FabricClientCommandSource source, boolean enabled) {
+        if (!SpearLungeFeature.setEnabled(source.getClient(), enabled)) {
+            return error(source, "Spear Lunge " + onOff(enabled)
+                    + " in memory, but could not save config/overtake.json; check the game log.");
+        }
+        return feedback(source, "Spear Lunge " + onOff(enabled) + ".");
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> pearlCommands() {
+        return literal("pearl")
+                .executes(context -> status(context.getSource()))
+                .then(argument("key", StringArgumentType.string()).executes(context -> {
+                    String key = StringArgumentType.getString(context, "key");
+                    if (!StunKeybind.isValid(key)) {
+                        return error(context.getSource(),
+                                "Invalid key. Use a letter (R), digit (1), function key (F1-F12), or mouse button (mouse2-mouse5).");
+                    }
+                    OvertakeClient.CONFIG.pearlKeybind = StunKeybind.normalize(key);
+                    return save(context.getSource(),
+                            "Ender Pearl activation key set to " + OvertakeClient.CONFIG.pearlKeybind + ".");
+                }))
+                .then(literal("delay")
+                        .executes(context -> status(context.getSource()))
+                        .then(argument("ticks", IntegerArgumentType.integer(0, 20)).executes(context -> {
+                            OvertakeClient.CONFIG.pearlWindChargeDelayTicks =
+                                    IntegerArgumentType.getInteger(context, "ticks");
+                            return save(context.getSource(), "Wind Charge throw delay set to "
+                                    + OvertakeClient.CONFIG.pearlWindChargeDelayTicks + " ticks.");
+                        })));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> switchCommands() {
@@ -113,20 +232,7 @@ public final class OvertakeCommands {
                                     save(context.getSource(), "Weapon priority: " + String.join(" > ", priorities) + ".");
                                     return 1;
                                 })))))
-                .then(literal("status").executes(context -> {
-                    var settings = OvertakeClient.CONFIG.settings();
-                    return feedback(context.getSource(), "Switch " + onOff(settings.switchEnabled)
-                            + ", priority " + String.join(" > ", settings.weaponPriority)
-                            + ", delay " + settings.switchDelay + " ticks, restore " + onOff(settings.restoreSlot)
-                            + ", manual override " + onOff(settings.manualOverride)
-                            + ", state " + OvertakeClient.SWITCHER.status()
-                            + ", shield slot " + slot(OvertakeClient.SWITCHER.findShieldSlot(context.getSource().getPlayer()))
-                            + "/offhand " + onOff(OvertakeClient.SWITCHER.hasOffhandShield(context.getSource().getPlayer()))
-                            + ", pearl slot " + slot(OvertakeClient.SWITCHER.findPearlSlot(context.getSource().getPlayer()))
-                            + "/offhand " + onOff(OvertakeClient.SWITCHER.hasOffhandPearl(context.getSource().getPlayer()))
-                            + ", offhand totem " + onOff(OvertakeClient.SWITCHER.hasOffhandTotem(context.getSource().getPlayer()))
-                            + ", hotbar totem slot " + slot(OvertakeClient.SWITCHER.findTotemSlot(context.getSource().getPlayer())) + ".");
-                }));
+                .then(literal("status").executes(context -> status(context.getSource())));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource> maceCommands() {
@@ -156,14 +262,7 @@ public final class OvertakeCommands {
                             save(context.getSource(), "Mace switch delay: " + OvertakeClient.CONFIG.settings().maceDelay + " ticks.");
                             return 1;
                         })))
-                .then(literal("status").executes(context -> {
-                    var settings = OvertakeClient.CONFIG.settings();
-                    return feedback(context.getSource(), "Mace " + onOff(settings.maceEnabled) + ", mode "
-                            + settings.maceMode + ", triggerbot " + onOff(settings.maceAutoAttack)
-                            + ", threshold " + settings.maceThreshold + " blocks, range "
-                            + settings.maceRange + " blocks, switch delay " + settings.maceDelay + " ticks. "
-                            + "Timing depends on server latency, server tick rate, and game mechanics.");
-                }));
+                .then(literal("status").executes(context -> status(context.getSource())));
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<FabricClientCommandSource>
@@ -253,13 +352,7 @@ public final class OvertakeCommands {
                         .then(literal("off").executes(context -> setBoolean(context.getSource(),
                                 "Mace fall check", settings -> settings.stunMaceFallCheck = false,
                                 "Mace fall check disabled.")))))
-                .then(literal("status").executes(context -> {
-                    var settings = OvertakeClient.CONFIG.settings();
-                    return feedback(context.getSource(), "Stun key " + OvertakeClient.CONFIG.stunKeybind
-                            + ", target " + settings.targetMode + ", follow-up " + settings.followUpMode
-                            + ", reach " + settings.stunReach + ", aim cone " + settings.stunAimCone
-                            + " degrees, mace fall check " + onOff(settings.stunMaceFallCheck) + ".");
-                }));
+                .then(literal("status").executes(context -> status(context.getSource())));
     }
 
     private static int setStunTarget(FabricClientCommandSource source, String mode, String label) {
@@ -296,6 +389,13 @@ public final class OvertakeCommands {
         return save(source, message);
     }
 
+    private static int setProfileBoolean(FabricClientCommandSource source, String profile,
+                                         java.util.function.Consumer<OvertakeConfig.Settings> change,
+                                         String message) {
+        change.accept(OvertakeClient.CONFIG.gameModeSettings.get(profile));
+        return save(source, message);
+    }
+
     private static int setDebug(FabricClientCommandSource source, boolean enabled) {
         OvertakeClient.CONFIG.debug = enabled;
         return save(source, "Diagnostic logging " + onOff(enabled) + ".");
@@ -319,13 +419,53 @@ public final class OvertakeCommands {
         return 0;
     }
 
-    private static String status() {
+    private static int status(FabricClientCommandSource source) {
         var settings = OvertakeClient.CONFIG.settings();
-        return "Master " + onOff(OvertakeClient.CONFIG.masterEnabled) + " | profile "
-                + OvertakeClient.CONFIG.profile + " | switch " + onOff(settings.switchEnabled)
-                + " | mace " + onOff(settings.maceEnabled) + " (" + settings.maceMode
-                + ", triggerbot " + onOff(settings.maceAutoAttack) + ") | HUD "
-                + onOff(settings.hudEnabled) + ".";
+        var player = source.getPlayer();
+        List<String> lines = new java.util.ArrayList<>(24);
+        lines.add("Status");
+        lines.add("Master: " + onOff(OvertakeClient.CONFIG.masterEnabled));
+        lines.add("Profile: " + OvertakeClient.CONFIG.profile);
+        lines.add("Weapon switching: " + onOff(settings.switchEnabled));
+        lines.add("Switch priority: " + String.join(" > ", settings.weaponPriority));
+        lines.add("Melee target type/range: " + settings.targetType + "/" + settings.meleeRange + " blocks");
+        lines.add("Configured mace/sword/axe slots: " + slotSetting(settings.maceSlot) + "/"
+                + slotSetting(settings.swordSlot) + "/" + slotSetting(settings.axeSlot));
+        lines.add("Switch delay: " + settings.switchDelay + " ticks");
+        lines.add("Restore slot: " + onOff(settings.restoreSlot));
+        lines.add("Manual override: " + onOff(settings.manualOverride));
+        lines.add("Switch state: " + OvertakeClient.SWITCHER.status());
+        lines.add("Mace assistance: " + onOff(settings.maceEnabled));
+        lines.add("Mace mode: " + settings.maceMode);
+        lines.add("Mace triggerbot: " + onOff(settings.maceAutoAttack));
+        lines.add("Mace threshold/range: " + settings.maceThreshold + "/" + settings.maceRange + " blocks");
+        lines.add("Mace switch delay: " + settings.maceDelay + " ticks");
+        lines.add("Sword triggerbot/sprint reset: " + onOff(settings.swordTriggerbot)
+                + "/" + onOff(settings.swordSprintReset));
+        lines.add("Spear Lunge: " + onOff(OvertakeClient.CONFIG.dashEnabled));
+        lines.add("Spear switch delay: " + settings.spearLungeSwitchDelayMs + " ms");
+        lines.add("Pearl key: " + OvertakeClient.CONFIG.pearlKeybind);
+        lines.add("Wind Charge delay: " + OvertakeClient.CONFIG.pearlWindChargeDelayTicks + " ticks");
+        lines.add("Crystal/cart/healing potion keys: " + OvertakeClient.CONFIG.crystalKeybind + "/"
+                + OvertakeClient.CONFIG.cartKeybind + "/" + OvertakeClient.CONFIG.healingPotionKeybind);
+        lines.add("Stun key: " + OvertakeClient.CONFIG.stunKeybind);
+        lines.add("Stun target/follow-up: " + settings.targetMode + "/" + settings.followUpMode);
+        lines.add("Stun reach/cone: " + settings.stunReach + " blocks/" + settings.stunAimCone + " degrees");
+        lines.add("Stun mace fall check: " + onOff(settings.stunMaceFallCheck));
+        lines.add("HUD: " + onOff(settings.hudEnabled));
+        lines.add("HUD position/scale: " + settings.hudX + "," + settings.hudY + "/" + settings.hudScale);
+        lines.add("HUD sound alerts: " + onOff(settings.soundAlerts));
+        lines.add("Debug: " + onOff(OvertakeClient.CONFIG.debug));
+        if (player != null) {
+            lines.add("Shield hotbar/offhand: " + slot(OvertakeClient.SWITCHER.findShieldSlot(player))
+                    + "/" + onOff(OvertakeClient.SWITCHER.hasOffhandShield(player)));
+            lines.add("Pearl hotbar/offhand: " + slot(OvertakeClient.SWITCHER.findPearlSlot(player))
+                    + "/" + onOff(OvertakeClient.SWITCHER.hasOffhandPearl(player)));
+            lines.add("Totem hotbar/offhand: " + slot(OvertakeClient.SWITCHER.findTotemSlot(player))
+                    + "/" + onOff(OvertakeClient.SWITCHER.hasOffhandTotem(player)));
+        }
+        lines.forEach(line -> feedback(source, line));
+        return 1;
     }
 
     private static String configSummary() {
@@ -336,6 +476,12 @@ public final class OvertakeCommands {
                 + slotSetting(settings.axeSlot)
                 + "; priority " + String.join(" > ", settings.weaponPriority) + "; mace threshold "
                 + settings.maceThreshold + " blocks; mace triggerbot " + onOff(settings.maceAutoAttack)
+                + "; sword triggerbot/sprint reset " + onOff(settings.swordTriggerbot) + "/"
+                + onOff(settings.swordSprintReset)
+                + "; pearl key " + OvertakeClient.CONFIG.pearlKeybind + " / Wind Charge delay "
+                + OvertakeClient.CONFIG.pearlWindChargeDelayTicks + " ticks"
+                + "; crystal/cart/potion keys " + OvertakeClient.CONFIG.crystalKeybind + "/"
+                + OvertakeClient.CONFIG.cartKeybind + "/" + OvertakeClient.CONFIG.healingPotionKeybind
                 + "; stun key " + OvertakeClient.CONFIG.stunKeybind + " target/mode "
                 + settings.targetMode + "/" + settings.followUpMode
                 + " reach/cone " + settings.stunReach + "/" + settings.stunAimCone

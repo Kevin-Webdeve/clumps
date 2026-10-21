@@ -60,14 +60,16 @@ public final class SpearLungeFeature {
         return sequence != Sequence.NONE || state == State.INPUT_PENDING || state == State.DASH_ACTIVE;
     }
 
-    public static void setEnabled(Minecraft client, boolean enabled) {
-        if (OvertakeClient.CONFIG == null) return;
+    public static boolean setEnabled(Minecraft client, boolean enabled) {
+        if (OvertakeClient.CONFIG == null) return false;
         OvertakeClient.CONFIG.dashEnabled = enabled;
         if (!enabled) cancel(client, "Feature disabled");
-        OvertakeClient.CONFIG.save();
+        boolean saved = OvertakeClient.CONFIG.save();
         if (client.gui != null) {
-            client.gui.setOverlayMessage(Component.literal("Spear Lunge: " + (enabled ? "ON" : "OFF")), true);
+            client.gui.setOverlayMessage(Component.literal("Spear Lunge: " + (enabled ? "ON" : "OFF")
+                    + (saved ? "" : " (config save failed)")), true);
         }
+        return saved;
     }
 
     private static void tick(Minecraft client) {

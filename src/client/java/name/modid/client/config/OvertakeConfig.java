@@ -11,8 +11,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class OvertakeConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -25,16 +27,46 @@ public final class OvertakeConfig {
     public boolean enableOnMultiplayer = true;
     public String profile = "default";
     public String stunKeybind = "G";
+    public String pearlKeybind = "P";
+    public String crystalKeybind = "C";
+    public String cartKeybind = "V";
+    public String healingPotionKeybind = "H";
+    public int pearlWindChargeDelayTicks = 2;
     public Settings defaultSettings = new Settings();
     public Settings pvpSettings = Settings.pvp();
     public Settings practiceSettings = Settings.practice();
+    public Map<String, Settings> gameModeSettings = createGameModeSettings();
 
     public Settings settings() {
         return switch (profile) {
             case "pvp" -> pvpSettings;
             case "practice" -> practiceSettings;
+            case "sword", "axe", "smp", "crystal", "pot", "uhc", "cart", "mace", "spear", "vanilla", "tnt" ->
+                    gameModeSettings.get(profile);
             default -> defaultSettings;
         };
+    }
+
+    public static String normalizeProfile(String profile) {
+        if (profile == null) return null;
+        String normalized = profile.toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "diamond", "netherite" -> "smp";
+            case "nodebuff", "nethpot" -> "pot";
+            case "trident" -> "spear";
+            case "default", "pvp", "practice", "sword", "axe", "smp", "crystal",
+                    "pot", "uhc", "cart", "mace", "spear", "vanilla", "tnt" -> normalized;
+            default -> null;
+        };
+    }
+
+    private static Map<String, Settings> createGameModeSettings() {
+        Map<String, Settings> profiles = new LinkedHashMap<>();
+        for (String name : List.of("sword", "axe", "smp", "crystal", "pot", "uhc",
+                "cart", "mace", "spear", "vanilla", "tnt")) {
+            profiles.put(name, Settings.forGameMode(name));
+        }
+        return profiles;
     }
 
     public static OvertakeConfig load() {
@@ -70,17 +102,47 @@ public final class OvertakeConfig {
     }
 
     public void validate() {
-        if (profile == null || !List.of("default", "pvp", "practice").contains(profile)) {
-            profile = "default";
-        }
+        String normalizedProfile = normalizeProfile(profile);
+        profile = normalizedProfile == null ? "default" : normalizedProfile;
         if (!StunKeybind.isValid(stunKeybind)) {
             stunKeybind = "G";
         } else {
             stunKeybind = StunKeybind.normalize(stunKeybind);
         }
+        if (!StunKeybind.isValid(pearlKeybind)) {
+            pearlKeybind = "P";
+        } else {
+            pearlKeybind = StunKeybind.normalize(pearlKeybind);
+        }
+        if (!StunKeybind.isValid(crystalKeybind)) {
+            crystalKeybind = "C";
+        } else {
+            crystalKeybind = StunKeybind.normalize(crystalKeybind);
+        }
+        if (!StunKeybind.isValid(cartKeybind)) {
+            cartKeybind = "V";
+        } else {
+            cartKeybind = StunKeybind.normalize(cartKeybind);
+        }
+        if (!StunKeybind.isValid(healingPotionKeybind)) {
+            healingPotionKeybind = "H";
+        } else {
+            healingPotionKeybind = StunKeybind.normalize(healingPotionKeybind);
+        }
+        pearlWindChargeDelayTicks = Math.max(0, Math.min(20, pearlWindChargeDelayTicks));
         if (defaultSettings == null) defaultSettings = new Settings();
         if (pvpSettings == null) pvpSettings = Settings.pvp();
         if (practiceSettings == null) practiceSettings = Settings.practice();
+        if (gameModeSettings == null) gameModeSettings = new LinkedHashMap<>();
+        Map<String, Settings> defaultGameModeSettings = createGameModeSettings();
+        for (Map.Entry<String, Settings> entry : defaultGameModeSettings.entrySet()) {
+            Settings settings = gameModeSettings.get(entry.getKey());
+            if (settings == null) {
+                settings = entry.getValue();
+                gameModeSettings.put(entry.getKey(), settings);
+            }
+            settings.validate();
+        }
         defaultSettings.validate();
         pvpSettings.validate();
         practiceSettings.validate();
@@ -122,6 +184,8 @@ public final class OvertakeConfig {
         public String targetMode = "CROSSHAIR_OR_NEAREST";
         public String followUpMode = "AUTO";
         public boolean maceAutoAttack;
+        public boolean swordTriggerbot;
+        public boolean swordSprintReset;
         public List<String> weaponPriority = new ArrayList<>(List.of("mace", "sword", "axe"));
 
         private static Settings pvp() {
@@ -135,6 +199,23 @@ public final class OvertakeConfig {
             Settings settings = new Settings();
             settings.maceMode = "assist";
             settings.soundAlerts = true;
+            return settings;
+        }
+
+        private static Settings forGameMode(String profile) {
+            Settings settings = new Settings();
+            settings.targetType = "players";
+            settings.maceEnabled = "mace".equals(profile);
+            settings.maceMode = settings.maceEnabled ? "assist" : "manual";
+            if ("sword".equals(profile)) {
+                settings.swordTriggerbot = true;
+                settings.swordSprintReset = true;
+            }
+            if ("axe".equals(profile)) {
+                settings.weaponPriority = new ArrayList<>(List.of("axe", "sword", "mace"));
+            } else {
+                settings.weaponPriority = new ArrayList<>(List.of("sword", "axe", "mace"));
+            }
             return settings;
         }
 

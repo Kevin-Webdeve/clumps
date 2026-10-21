@@ -3,9 +3,11 @@ package name.modid.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import name.modid.client.command.OvertakeCommands;
 import name.modid.client.config.OvertakeConfig;
-import name.modid.client.module.WeaponSwitchController;
+import name.modid.client.gui.OvertakeSettingsScreen;
+import name.modid.client.module.PearlFeature;
+import name.modid.client.module.CombatProfileFeature;
 import name.modid.client.module.SpearLungeFeature;
-import name.modid.client.command.SpearLungeCommand;
+import name.modid.client.module.WeaponSwitchController;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -20,7 +22,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.phys.EntityHitResult;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ public class OvertakeClient implements ClientModInitializer {
     public static double targetDistance = -1;
     public static long lastTickNanos;
     private static KeyMapping toggleKey;
+    private static KeyMapping settingsKey;
     private static ClientLevel previousWorld;
     private static String previousActionState = "";
     private static boolean autoAttackAttempted;
@@ -45,10 +47,13 @@ public class OvertakeClient implements ClientModInitializer {
         CONFIG = OvertakeConfig.load();
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.overtake.toggle", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, KeyMapping.Category.MISC));
+        settingsKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.overtake.settings", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_K, KeyMapping.Category.MISC));
         OvertakeCommands.register();
-        SpearLungeCommand.register();
         SpearLungeFeature.register();
+        PearlFeature.register();
         ClientTickEvents.START_CLIENT_TICK.register(OvertakeClient::tick);
+        CombatProfileFeature.register();
         HudElementRegistry.attachElementAfter(VanillaHudElements.BOSS_BAR,
                 Identifier.fromNamespaceAndPath(MOD_ID, "hud"),
                 (graphics, tickCounter) -> render(graphics));
@@ -58,6 +63,11 @@ public class OvertakeClient implements ClientModInitializer {
         long started = System.nanoTime();
         while (toggleKey.consumeClick()) {
             toggleMaster(client);
+        }
+        while (settingsKey.consumeClick()) {
+            if (client.screen == null) {
+                client.setScreen(new OvertakeSettingsScreen(null));
+            }
         }
         OvertakeConfig.Settings settings = CONFIG.settings();
         if (client.level != previousWorld) {
@@ -94,6 +104,10 @@ public class OvertakeClient implements ClientModInitializer {
             lastTickNanos = System.nanoTime() - started;
             return;
         }
+        if (PearlFeature.isActionActiveThisTick()) {
+            lastTickNanos = System.nanoTime() - started;
+            return;
+        }
         if (!CONFIG.masterEnabled) {
             SWITCHER.cancel(client, false);
             maceReady = false;
@@ -118,11 +132,16 @@ public class OvertakeClient implements ClientModInitializer {
         boolean maceRequest = settings.switchEnabled && settings.maceEnabled
                 && maceReady && (settings.maceAutoAttack
                 || ("assist".equals(settings.maceMode) && client.options.keyAttack.isDown()));
+        double maceDetectionRange = Math.max(4.5,
+                OvertakeRuntime.targetRange(client, settings.maceRange));
+        boolean swordTriggerbot = "sword".equals(CONFIG.profile) && settings.swordTriggerbot;
         int preferredMeleeSlot = target == null ? -1
+                : swordTriggerbot ? SWITCHER.findSwordSlot(client.player)
+                : "axe".equals(CONFIG.profile) ? SWITCHER.findAxeSlot(client.player)
                 : SWITCHER.findPreferredMeleeSlot(client.player, settings.weaponPriority);
         boolean meleeRequest = CONFIG.masterEnabled && settings.switchEnabled && target != null
                 && targetDistance <= OvertakeRuntime.targetRange(client, settings.meleeRange)
-                && client.options.keyAttack.isDown();
+                && (client.options.keyAttack.isDown() || swordTriggerbot);
         int requestedSlot = maceRequest
                 ? SWITCHER.findMaceSlot(client.player)
                 : meleeRequest ? preferredMeleeSlot : -1;
@@ -134,8 +153,7 @@ public class OvertakeClient implements ClientModInitializer {
 
         if (settings.maceAutoAttack && maceRequest && !autoAttackAttempted
                 && SWITCHER.isActionReady(requestedSlot) && client.gameMode != null) {
-            autoAttackAttempted = attackTarget(client, target,
-                    OvertakeRuntime.targetRange(client, settings.maceRange));
+            autoAttackAttempted = attackTarget(client, target, maceDetectionRange);
         }
 
         if (!CONFIG.masterEnabled) {
@@ -170,8 +188,6 @@ public class OvertakeClient implements ClientModInitializer {
         if (client.player == null || client.gameMode == null || target == null
                 || !client.player.isAlive() || client.player.isSpectator()
                 || !target.isAlive() || !target.isAttackable()
-                || !(client.hitResult instanceof EntityHitResult hit) || hit.getEntity() != target
-                || !client.player.isWithinAttackRange(target.getBoundingBox(), target.getPickRadius())
                 || client.player.distanceTo(target) > maximumRange) {
             return false;
         }

@@ -22,6 +22,13 @@ loom {
 	}
 }
 
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.output
+		runtimeClasspath += sourceSets.client.output
+	}
+}
+
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -30,6 +37,9 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	testImplementation "org.junit.jupiter:junit-jupiter:5.11.4"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.11.4"
 }
 
 processResources {
@@ -43,6 +53,10 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 21
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 java {
@@ -65,7 +79,7 @@ jar {
 }
 
 tasks.named("remapJar") {
-	archiveFileName = "Clumps-fabric-1.21.11-29.0.0.jar"
+	archiveFileName = "Clumps-fabric-${project.minecraft_version}-${project.version}.jar"
 }
 
 // configure the maven publication

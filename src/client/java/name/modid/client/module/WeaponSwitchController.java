@@ -76,12 +76,18 @@ public final class WeaponSwitchController {
         return axeSlot;
     }
 
+    public int findSwordSlot(LocalPlayer player) {
+        if (cachedPlayer != player) refreshHotbar(player);
+        return swordSlot;
+    }
+
     public int findPreferredMeleeSlot(LocalPlayer player, List<String> priority) {
         if (cachedPlayer != player) refreshHotbar(player);
         int selectedSlot = player.getInventory().getSelectedSlot();
         if (isSpear(player.getInventory().getItem(selectedSlot))) return selectedSlot;
         for (String kind : priority) {
             if ("sword".equals(kind) && swordSlot >= 0) return swordSlot;
+            if ("axe".equals(kind) && axeSlot >= 0) return axeSlot;
         }
         return -1;
     }
@@ -189,7 +195,7 @@ public final class WeaponSwitchController {
             }
         }
         if (state == State.SWITCH_REQUESTED) {
-            if (++pendingTicks > Math.max(3, delay + 2)) {
+            if (SwitchTiming.isExpired(++pendingTicks, delay)) {
                 cancel(client, restoreSlot, "Switch request expired");
                 return;
             }

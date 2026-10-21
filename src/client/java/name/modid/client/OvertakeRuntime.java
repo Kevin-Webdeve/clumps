@@ -5,19 +5,26 @@ import name.modid.client.module.WeaponSwitchController;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public final class OvertakeRuntime {
+    private static final List<String> HUD_LINES = new ArrayList<>(10);
+
     private OvertakeRuntime() {
     }
 
     public static LivingEntity findTarget(Minecraft client, OvertakeConfig.Settings settings) {
-        if (!(client.hitResult instanceof EntityHitResult hit)
+        if (!(targetHitResult(client) instanceof EntityHitResult hit)
                 || !(hit.getEntity() instanceof LivingEntity target)
                 || target == client.player || !target.isAlive()) {
             return null;
@@ -26,12 +33,47 @@ public final class OvertakeRuntime {
             return null;
         }
         double distance = client.player.distanceTo(target);
-        double maximumRange = targetRange(client, settings.meleeRange);
+        boolean spearHeld = isSpearHeld(client);
+        double maximumRange = spearHeld ? 4.5 : targetRange(client, settings.meleeRange);
         if (settings.maceEnabled && isFallingAtLeast(client, settings.maceThreshold)
                 && OvertakeClient.SWITCHER.findMaceSlot(client.player) >= 0) {
             maximumRange = Math.max(maximumRange, Math.min(settings.maceRange, 4.5));
         }
-        return distance <= maximumRange ? target : null;
+        return spearHeld || distance <= maximumRange ? target : null;
+    }
+
+    public static boolean isCrosshairTarget(Minecraft client, LivingEntity target) {
+        return targetHitResult(client) instanceof EntityHitResult hit && hit.getEntity() == target;
+    }
+
+    private static HitResult targetHitResult(Minecraft client) {
+        if (client.player == null || !isSpearHeld(client)) return client.hitResult;
+
+        float partialTick = client.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        var player = client.player;
+        Vec3 start = player.getEyePosition(partialTick);
+        Vec3 look = player.getViewVector(partialTick);
+        Vec3 end = start.add(look.scale(4.5));
+        HitResult blockHit = player.pick(4.5, partialTick, false);
+        double maximumDistanceSquared = blockHit.getType() == HitResult.Type.MISS
+                ? 4.5 * 4.5
+                : blockHit.getLocation().distanceToSqr(start);
+        AABB searchBox = player.getBoundingBox()
+                .expandTowards(look.scale(4.5))
+                .inflate(1.0);
+        EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(
+                player, start, end, searchBox, EntitySelector.CAN_BE_PICKED, maximumDistanceSquared);
+        if (entityHit != null
+                && entityHit.getLocation().distanceToSqr(start) < maximumDistanceSquared) {
+            return entityHit;
+        }
+        return blockHit;
+    }
+
+    private static boolean isSpearHeld(Minecraft client) {
+        return client.player != null
+                && BuiltInRegistries.ITEM.getKey(client.player.getMainHandItem().getItem())
+                .getPath().contains("spear");
     }
 
     public static double targetRange(Minecraft client, double configuredRange) {
@@ -59,7 +101,8 @@ public final class OvertakeRuntime {
     public static void renderHud(GuiGraphics graphics, OvertakeConfig config, WeaponSwitchController switcher,
                                  boolean maceReady, String actionState, String cancellationReason, double targetDistance, long tickNanos) {
         OvertakeConfig.Settings settings = config.settings();
-        List<String> lines = new ArrayList<>(8);
+        List<String> lines = HUD_LINES;
+        lines.clear();
         lines.add("OverTake: " + (config.masterEnabled ? "ON" : "OFF") + " [" + config.profile + "]");
         lines.add("Switch " + onOff(settings.switchEnabled) + " | Mace " + onOff(settings.maceEnabled));
         var player = Minecraft.getInstance().player;
@@ -74,9 +117,7 @@ public final class OvertakeRuntime {
         lines.add("Mace: " + (maceReady ? "READY" : "not ready") + " | Switch: " + switcher.status());
         if (player != null) {
             lines.add("Shield slot " + slot(switcher.findShieldSlot(player)) + "/offhand "
-                    + onOff(switcher.hasOffhandShield(player)) + " | Pearl slot "
-                    + slot(switcher.findPearlSlot(player)) + "/offhand " + onOff(switcher.hasOffhandPearl(player))
-                    + " | Totem slot "
+                    + onOff(switcher.hasOffhandShield(player)) + " | Totem slot "
                     + slot(switcher.findTotemSlot(player)) + " | Offhand totem "
                     + onOff(switcher.hasOffhandTotem(player)));
         }

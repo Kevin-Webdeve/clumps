@@ -96,7 +96,7 @@ public final class StunSlam {
         maceFollowUp = false;
     }
 
-    private static boolean isKeyDown(Minecraft client, String keyName) {
+    static boolean isKeyDown(Minecraft client, String keyName) {
         StunKeybind.Key key = StunKeybind.parse(keyName);
         if (key == null || client.getWindow() == null
                 || (key.mouse() && key.code() == GLFW.GLFW_MOUSE_BUTTON_1)) return false;
