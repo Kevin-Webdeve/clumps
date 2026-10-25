@@ -49,6 +49,8 @@ public final class SpearLungeFeature {
     private static int waitTicks;
     private static int bufferedInputTicks;
     private static int lowMotionTicks;
+    private static long lastTriggerNanos;
+    private static long lastTriggerTick;
     private SpearLungeFeature() {
     }
 
@@ -72,6 +74,32 @@ public final class SpearLungeFeature {
         return saved;
     }
 
+    public static void resetSession() {
+        sequence = Sequence.NONE;
+        sequencePlayer = null;
+        sequenceLevel = null;
+        initialPosition = null;
+        initialVelocity = null;
+        dashDirection = null;
+        attemptLungeLevel = 0;
+        attemptStartTick = 0L;
+        nextEligibleTick = 0L;
+        lastAttemptNanos = 0L;
+        switchDelayUntilNanos = 0L;
+        originalSlot = -1;
+        spearSlot = -1;
+        waitTicks = 0;
+        bufferedInputTicks = 0;
+        lowMotionTicks = 0;
+        state = State.IDLE;
+        clearTriggerCooldown();
+    }
+
+    private static void resetSessionState(Minecraft client, String reason) {
+        resetSession();
+        setState(State.IDLE, client, reason);
+    }
+
     private static void tick(Minecraft client) {
         OvertakeConfig config = OvertakeClient.CONFIG;
         if (config == null) return;
@@ -83,6 +111,9 @@ public final class SpearLungeFeature {
                 boolean lungeInput = sequence != Sequence.NONE
                         || isSupportedTriggerItem(client.player.getMainHandItem());
                 if (lungeInput) attackClicked = client.options.keyAttack.consumeClick();
+                if (attackClicked && !shouldAcceptTriggerClick(client)) {
+                    attackClicked = false;
+                }
             }
 
             if (!config.dashEnabled || client.player == null || client.level == null
@@ -92,9 +123,7 @@ public final class SpearLungeFeature {
                 if (attackClicked && client.player != null && client.player.isAlive()) {
                     client.player.swing(InteractionHand.MAIN_HAND);
                 }
-                if (sequence != Sequence.NONE || state == State.INPUT_PENDING || state == State.DASH_ACTIVE) {
-                    cancel(client, "Player/world state became invalid");
-                }
+                resetSessionState(client, "Player/world state became invalid");
                 bufferedInputTicks = 0;
                 return;
             }
@@ -214,11 +243,15 @@ public final class SpearLungeFeature {
         waitTicks = BACK_DELAY_TICKS;
         lowMotionTicks = 0;
         sequence = Sequence.SWITCH_DELAY;
-        switchDelayUntilNanos = System.nanoTime()
-                + settings.spearLungeSwitchDelayMs * 1_000_000L;
+        int hotbarDelayTicks = settings.spearLungeHotbarSwitchDelayTicks;
+        if (hotbarDelayTicks <= 0) {
+            performSpearJab(client, settings);
+            return;
+        }
+        switchDelayUntilNanos = System.nanoTime() + (long) hotbarDelayTicks * 50_000_000L;
         setState(State.INPUT_PENDING, client, "Selecting spear; waiting configured switch delay");
         player.getInventory().setSelectedSlot(spearSlot);
-        if (settings.spearLungeSwitchDelayMs == 0) performSpearJab(client, settings);
+        if (settings.spearLungeSwitchDelayMs <= 1) performSpearJab(client, settings);
         logAttempt(client, settings);
     }
 
@@ -410,10 +443,21 @@ public final class SpearLungeFeature {
         sequence = Sequence.NONE;
         sequencePlayer = null;
         sequenceLevel = null;
+        initialPosition = null;
+        initialVelocity = null;
+        dashDirection = null;
+        attemptLungeLevel = 0;
+        attemptStartTick = 0L;
+        nextEligibleTick = 0L;
+        lastAttemptNanos = 0L;
+        switchDelayUntilNanos = 0L;
         originalSlot = -1;
         spearSlot = -1;
         waitTicks = 0;
+        bufferedInputTicks = 0;
         lowMotionTicks = 0;
+        state = State.IDLE;
+        clearTriggerCooldown();
     }
 
     private static void setState(State next, Minecraft client, String reason) {
@@ -448,5 +492,28 @@ public final class SpearLungeFeature {
                 client.player == null ? Vec3.ZERO : client.player.position(),
                 initialPosition == null ? Vec3.ZERO : initialPosition,
                 Math.max(0, nextEligibleTick - client.level.getGameTime()));
+    }
+
+    private static boolean shouldAcceptTriggerClick(Minecraft client) {
+        if (lastTriggerNanos <= 0L) {
+            lastTriggerNanos = System.nanoTime();
+            lastTriggerTick = client.level != null ? client.level.getGameTime() : 0L;
+            return true;
+        }
+        long elapsedNanos = System.nanoTime() - lastTriggerNanos;
+        long limitNanos = OvertakeClient.CONFIG != null && OvertakeClient.CONFIG.settings() != null
+                ? (long) OvertakeClient.CONFIG.settings().spearLungeClickTriggerLimitMs * 1_000_000L
+                : 50_000_000L;
+        if (elapsedNanos >= limitNanos) {
+            lastTriggerNanos = System.nanoTime();
+            lastTriggerTick = client.level != null ? client.level.getGameTime() : lastTriggerTick;
+            return true;
+        }
+        return false;
+    }
+
+    private static void clearTriggerCooldown() {
+        lastTriggerNanos = 0L;
+        lastTriggerTick = 0L;
     }
 }

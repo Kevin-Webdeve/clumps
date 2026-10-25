@@ -72,6 +72,7 @@ public class OvertakeClient implements ClientModInitializer {
         OvertakeConfig.Settings settings = CONFIG.settings();
         if (client.level != previousWorld) {
             SWITCHER.cancel(client, false);
+            SpearLungeFeature.resetSession();
             previousWorld = client.level;
             targetDistance = -1;
             maceReady = false;

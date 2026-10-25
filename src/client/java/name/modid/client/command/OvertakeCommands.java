@@ -165,6 +165,19 @@ public final class OvertakeCommands {
                             int delay = IntegerArgumentType.getInteger(context, "milliseconds");
                             OvertakeClient.CONFIG.settings().spearLungeSwitchDelayMs = delay;
                             return save(context.getSource(), "Spear Lunge switch delay: " + delay + " ms.");
+                        })))
+                .then(literal("clicklimit").then(argument("milliseconds", IntegerArgumentType.integer(0, 5000))
+                        .executes(context -> {
+                            int limit = IntegerArgumentType.getInteger(context, "milliseconds");
+                            OvertakeClient.CONFIG.settings().spearLungeClickTriggerLimitMs = limit;
+                            return save(context.getSource(), "Spear Lunge click trigger limit: " + limit + " ms.");
+                        })))
+                .then(literal("switchhotbardelay").then(argument("ticks", IntegerArgumentType.integer(0, 20))
+                        .executes(context -> {
+                            int ticks = IntegerArgumentType.getInteger(context, "ticks");
+                            OvertakeClient.CONFIG.settings().spearLungeHotbarSwitchDelayTicks = ticks;
+                            return save(context.getSource(),
+                                    "Spear Lunge hotbar switch delay: " + ticks + " tick" + (ticks == 1 ? "" : "s") + ".");
                         })));
     }
 

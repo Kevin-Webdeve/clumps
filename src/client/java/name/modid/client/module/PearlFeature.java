@@ -260,6 +260,7 @@ public final class PearlFeature {
         double sensitivityScale = sensitivity * 0.6 + 0.2;
         double sensitivityStep = sensitivityScale * sensitivityScale * sensitivityScale * 8.0;
         float gcd = (float) sensitivityStep * 0.15F;
+
         if (gcd <= 0.0) return;
         float yawDifference = Mth.wrapDegrees(target.yaw - aimYaw);
         int maxSteps = Math.max(1, (int) (60.0F / gcd));
@@ -333,7 +334,7 @@ public final class PearlFeature {
     }
 
     private static void showMessage(Minecraft client, String message) {
-        client.gui.setOverlayMessage(Component.literal("[OT] " + message), false);
+        // Suppress OT hotbar notifications.
     }
 
     private record Aim(float yaw, float pitch) {

@@ -31,7 +31,7 @@ public final class OvertakeConfig {
     public String crystalKeybind = "C";
     public String cartKeybind = "V";
     public String healingPotionKeybind = "H";
-    public int pearlWindChargeDelayTicks = 2;
+    public int pearlWindChargeDelayTicks = 0;
     public Settings defaultSettings = new Settings();
     public Settings pvpSettings = Settings.pvp();
     public Settings practiceSettings = Settings.practice();
@@ -155,6 +155,9 @@ public final class OvertakeConfig {
         public int inputBufferTicks = 1;
         public int dashCooldownTicks = 2;
         public int spearLungeSwitchDelayMs = 30;
+        public int spearLungeHotbarSwitchDelayTicks = 0;
+        public int spearLungeClickTriggerLimitMs = 50;
+        public int maceRestoreDelayMs = 70;
         public boolean requireLungeEnchantment = true;
         public boolean allowVerticalDash;
         public boolean allowAirDash = true;
@@ -226,6 +229,9 @@ public final class OvertakeConfig {
             inputBufferTicks = clamp(inputBufferTicks, 0, 20);
             dashCooldownTicks = clamp(dashCooldownTicks, 0, 1200);
             spearLungeSwitchDelayMs = clamp(spearLungeSwitchDelayMs, 0, 5000);
+            spearLungeHotbarSwitchDelayTicks = clamp(spearLungeHotbarSwitchDelayTicks, 0, 20);
+            spearLungeClickTriggerLimitMs = clamp(spearLungeClickTriggerLimitMs, 0, 5000);
+            maceRestoreDelayMs = clamp(maceRestoreDelayMs, 0, 5000);
             switchDelay = clamp(switchDelay, 0, 100);
             maceDelay = clamp(maceDelay, 0, 100);
             hudX = clamp(hudX, 0, 10000);
